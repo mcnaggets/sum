@@ -11,6 +11,7 @@ import java.util.stream.IntStream;
 
 import static java.nio.ByteOrder.LITTLE_ENDIAN;
 import static java.util.stream.Collectors.toList;
+import static java.util.stream.IntStream.*;
 
 public class Sum {
 
@@ -18,8 +19,9 @@ public class Sum {
 
     public static final String FILE_PATH = "D:\\tmp\\sum\\examples\\1_000_000_000.txt";
     public static final Path PATH = Paths.get(FILE_PATH);
-    public static final int THREADS = 4;
-    public static final int NUMBERS_TO_READ = 3_000;
+    public static final int THREADS = 3;
+    public static final int NUMBERS_TO_READ = 10_000;
+    public static final int CAPACITY = BYTES_PER_NUMBER * NUMBERS_TO_READ;
 
     public static void main(String[] args) throws IOException, InterruptedException {
         long time = System.currentTimeMillis();
@@ -27,8 +29,8 @@ public class Sum {
         final long size = Files.size(PATH);
         final ExecutorService executorService = Executors.newFixedThreadPool(THREADS);
         double sum = executorService.invokeAll(
-                IntStream.range(0, THREADS).mapToObj(i -> createSumCounter(size, i))
-                        .collect(toList())).stream().mapToDouble(Sum::getADouble).sum();
+                range(0, THREADS).mapToObj(i -> createSumCounter(size, i))
+                        .collect(toList())).stream().mapToLong(Sum::getALong).sum();
         executorService.shutdown();
 
         System.out.printf("Sum %.0f\n", sum);
@@ -40,18 +42,19 @@ public class Sum {
     }
 
     private static long fileOffset(int threadNumber, long fileSize) {
-        return threadNumber * fileSize / THREADS;
+        final long offset = threadNumber * fileSize / THREADS;
+        return offset - (offset % BYTES_PER_NUMBER);
     }
 
-    private static Double getADouble(Future<Double> future) {
+    private static Long getALong(Future<Long> future) {
         try {
             return future.get();
         } catch (InterruptedException | ExecutionException e) {
-            return 0d;
+            return 0l;
         }
     }
 
-    static class SumCounter implements Callable<Double> {
+    static class SumCounter implements Callable<Long> {
 
         private final long from;
         private final long to;
@@ -62,11 +65,11 @@ public class Sum {
         }
 
         @Override
-        public Double call() throws Exception {
+        public Long call() throws Exception {
             long time = System.currentTimeMillis();
 
-            double sum = 0;
-            final ByteBuffer buffer = ByteBuffer.allocate(BYTES_PER_NUMBER * NUMBERS_TO_READ).order(LITTLE_ENDIAN);
+            long sum = 0;
+            final ByteBuffer buffer = ByteBuffer.allocate(CAPACITY).order(LITTLE_ENDIAN);
             try (final SeekableByteChannel channel = Files.newByteChannel(PATH)) {
                 channel.position(from);
                 while (canRead(buffer, channel)) {
@@ -77,12 +80,18 @@ public class Sum {
                     buffer.clear();
                 }
             }
-            System.out.printf("Thread %s is finished (%.0f) within %s ms\n",
+
+            System.out.printf("Thread %s is finished (%d) within %s ms\n",
                     Thread.currentThread().getId(), sum, System.currentTimeMillis() - time);
+
             return sum;
         }
 
         private boolean canRead(ByteBuffer buffer, SeekableByteChannel channel) throws IOException {
+            final long bytesLeft = to - channel.position();
+            if (bytesLeft < CAPACITY) {
+                buffer.limit((int) bytesLeft);
+            }
             return channel.position() < to && channel.read(buffer) != -1;
         }
 
