@@ -1,11 +1,10 @@
 package com.whendu.sample;
 
-import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 public class JustCheck {
 
     public static void main(String[] args) {
-        final double sum = IntStream.range(1, 714).mapToDouble(Double::valueOf).sum();
-        System.out.printf("Sum %.0f\n", sum);
+        System.out.printf("Sum: %d\n", LongStream.range(1, 1_000_000 + 1).sum());
     }
 }
