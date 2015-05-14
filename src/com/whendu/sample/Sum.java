@@ -14,20 +14,20 @@ import static java.util.stream.Collectors.toList;
 
 public class Sum {
 
-    public static final String FILE_PATH = "D:\\tmp\\sum\\examples\\100_000_000.txt";
+    public static final int BYTES_PER_NUMBER = 4;
+
+    public static final String FILE_PATH = "D:\\tmp\\sum\\examples\\1_000_000_000.txt";
     public static final Path PATH = Paths.get(FILE_PATH);
     public static final int THREADS = 4;
-    public static final int BYTES_PER_NUMBER = 4;
-    public static final int NUMBERS_TO_READ = 10000;
+    public static final int NUMBERS_TO_READ = 3_000;
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        double time = System.currentTimeMillis();
+        long time = System.currentTimeMillis();
 
         final long size = Files.size(PATH);
         final ExecutorService executorService = Executors.newFixedThreadPool(THREADS);
-
         double sum = executorService.invokeAll(
-                IntStream.range(0, THREADS).mapToObj(i -> new SumCounter(fileOffset(i, size), fileOffset(i + 1, size)))
+                IntStream.range(0, THREADS).mapToObj(i -> createSumCounter(size, i))
                         .collect(toList())).stream().mapToDouble(Sum::getADouble).sum();
         executorService.shutdown();
 
@@ -35,13 +35,17 @@ public class Sum {
         System.out.printf("Elapsed time %s ms\n", System.currentTimeMillis() - time);
     }
 
+    private static SumCounter createSumCounter(long size, int i) {
+        return new SumCounter(fileOffset(i, size), fileOffset(i + 1, size));
+    }
+
     private static long fileOffset(int threadNumber, long fileSize) {
         return threadNumber * fileSize / THREADS;
     }
 
-    private static Double getADouble(Future<Double> t) {
+    private static Double getADouble(Future<Double> future) {
         try {
-            return t.get();
+            return future.get();
         } catch (InterruptedException | ExecutionException e) {
             return 0d;
         }
@@ -59,6 +63,8 @@ public class Sum {
 
         @Override
         public Double call() throws Exception {
+            long time = System.currentTimeMillis();
+
             double sum = 0;
             final ByteBuffer buffer = ByteBuffer.allocate(BYTES_PER_NUMBER * NUMBERS_TO_READ).order(LITTLE_ENDIAN);
             try (final SeekableByteChannel channel = Files.newByteChannel(PATH)) {
@@ -71,6 +77,8 @@ public class Sum {
                     buffer.clear();
                 }
             }
+            System.out.printf("Thread %s is finished (%.0f) within %s ms\n",
+                    Thread.currentThread().getId(), sum, System.currentTimeMillis() - time);
             return sum;
         }
 

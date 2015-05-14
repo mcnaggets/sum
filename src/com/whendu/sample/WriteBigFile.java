@@ -17,7 +17,7 @@ public class WriteBigFile {
 
         final String filePath = "D:\\tmp\\sum\\examples\\1_000_000_000.txt";
 
-        double time = System.currentTimeMillis();
+        long time = System.currentTimeMillis();
 
         final ByteBuffer buffer = ByteBuffer.allocate(4).order(LITTLE_ENDIAN);
         final Path path = Paths.get(filePath);
